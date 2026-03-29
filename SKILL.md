@@ -1,7 +1,7 @@
 ---
 name: buhuaguo-post-x
 description: Prepares content for X (Twitter) and copies it to the clipboard. Supports regular posts, quote comments, video posts, and X Articles. Uses local filenames as media placeholders so the user can paste text first and insert files manually.
-version: 1.58.0
+version: 1.0.0
 metadata:
   openclaw:
     homepage: https://github.com/SIXIANGGUO/buhuaguo-post-x

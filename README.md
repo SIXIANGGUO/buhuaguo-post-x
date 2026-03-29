@@ -1,9 +1,13 @@
 <p align="center">
+  <strong>Jump to:</strong> <a href="#english">English</a> | <a href="#chinese">中文</a>
+</p>
+
+<p align="center">
   <img src="./assets/buhuaguo-post-x-hero.svg" alt="buhuaguo-post-x hero" width="960">
 </p>
 
 <p align="center">
-  <a href="https://github.com/SIXIANGGUO/buhuaguo-post-x/releases/tag/v1.58.0"><img src="https://img.shields.io/github/v/release/SIXIANGGUO/buhuaguo-post-x?display_name=tag&style=flat-square" alt="Release"></a>
+  <a href="https://github.com/SIXIANGGUO/buhuaguo-post-x/releases/latest"><img src="https://img.shields.io/github/v/release/SIXIANGGUO/buhuaguo-post-x?display_name=tag&style=flat-square" alt="Release"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/SIXIANGGUO/buhuaguo-post-x?style=flat-square" alt="License"></a>
   <img src="https://img.shields.io/badge/Mode-Clipboard--First-0f766e?style=flat-square" alt="Clipboard First">
   <img src="https://img.shields.io/badge/X%20Articles-Table%20to%20PNG-0f172a?style=flat-square" alt="Table to PNG">
@@ -32,8 +36,9 @@ This repository contains only the `buhuaguo-post-x` skill and its required runti
 
 ## Workflow
 
-![Workflow](./assets/buhuaguo-post-x-workflow.svg)
+![Workflow](./assets/buhuaguo-post-x-workflow.png)
 
+<a id="english"></a>
 ## English
 
 ### What It Does
@@ -121,7 +126,8 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 MIT
 
-## 中文说明
+<a id="chinese"></a>
+## 中文
 
 ## 一眼看懂
 

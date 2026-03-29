@@ -133,7 +133,7 @@ async function downloadRemoteImage(urlString: string, assetDir: string): Promise
   const response = await fetch(urlString, {
     redirect: 'follow',
     headers: {
-      'user-agent': 'buhuaguo-post-x/1.58.0',
+      'user-agent': 'buhuaguo-post-x/1.0.0',
     },
   });
 
