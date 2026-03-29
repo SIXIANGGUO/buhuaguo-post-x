@@ -1,0 +1,769 @@
+import fs from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
+import path from 'node:path';
+import process from 'node:process';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+
+interface ImageInfo {
+  placeholder: string;
+  localPath: string;
+  originalPath: string;
+  blockIndex: number;
+}
+
+interface ParsedMarkdown {
+  title: string;
+  coverImage: string | null;
+  contentImages: ImageInfo[];
+  html: string;
+  totalBlocks: number;
+}
+
+type FrontmatterFields = Record<string, string>;
+
+function parseFrontmatter(content: string): { frontmatter: FrontmatterFields; body: string } {
+  if (!content.startsWith('---\n')) {
+    return { frontmatter: {}, body: content };
+  }
+
+  const endIndex = content.indexOf('\n---\n', 4);
+  if (endIndex === -1) {
+    return { frontmatter: {}, body: content };
+  }
+
+  const rawFrontmatter = content.slice(4, endIndex);
+  const body = content.slice(endIndex + 5);
+  const frontmatter: FrontmatterFields = {};
+
+  for (const line of rawFrontmatter.split('\n')) {
+    const match = line.match(/^\s*([A-Za-z0-9_-]+)\s*:\s*(.+?)\s*$/);
+    if (!match) continue;
+    frontmatter[match[1]!] = stripWrappingQuotes(match[2]!);
+  }
+
+  return { frontmatter, body };
+}
+
+function stripWrappingQuotes(value: string): string {
+  if (!value) return value;
+  const doubleQuoted = value.startsWith('"') && value.endsWith('"');
+  const singleQuoted = value.startsWith("'") && value.endsWith("'");
+  const cjkDoubleQuoted = value.startsWith('\u201c') && value.endsWith('\u201d');
+  const cjkSingleQuoted = value.startsWith('\u2018') && value.endsWith('\u2019');
+  if (doubleQuoted || singleQuoted || cjkDoubleQuoted || cjkSingleQuoted) {
+    return value.slice(1, -1).trim();
+  }
+  return value.trim();
+}
+
+function pickFirstString(frontmatter: FrontmatterFields, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = frontmatter[key];
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function findCoverImageNearMarkdown(baseDir: string): string | null {
+  const candidateDirs = [baseDir, path.join(baseDir, 'imgs')];
+  const coverPattern = /^cover\.(png|jpe?g|webp|gif)$/i;
+
+  for (const dir of candidateDirs) {
+    try {
+      if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
+      const match = fs.readdirSync(dir).find((entry) => coverPattern.test(entry));
+      if (match) return path.join(dir, match);
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function extractTitleFromMarkdown(markdown: string): string {
+  for (const line of markdown.split('\n')) {
+    const match = line.match(/^#\s+(.+?)\s*$/);
+    if (match) return stripWrappingQuotes(match[1]!);
+  }
+  return '';
+}
+
+function inferExtensionFromContentType(contentType: string | null): string {
+  if (!contentType) return '.img';
+  const normalized = contentType.toLowerCase().split(';')[0]!.trim();
+  switch (normalized) {
+    case 'image/jpeg':
+      return '.jpg';
+    case 'image/png':
+      return '.png';
+    case 'image/gif':
+      return '.gif';
+    case 'image/webp':
+      return '.webp';
+    case 'image/svg+xml':
+      return '.svg';
+    case 'image/avif':
+      return '.avif';
+    default:
+      return '.img';
+  }
+}
+
+function inferFilenameFromUrl(urlString: string, responseContentType: string | null): string {
+  let pathname = '';
+  try {
+    pathname = new URL(urlString).pathname;
+  } catch {
+    pathname = urlString;
+  }
+
+  const baseName = path.basename(pathname) || 'remote-image';
+  const cleanBaseName = baseName.replace(/[^A-Za-z0-9._-]/g, '_');
+  const ext = path.extname(cleanBaseName);
+  const stem = ext ? cleanBaseName.slice(0, -ext.length) : cleanBaseName;
+  const hash = crypto.createHash('sha1').update(urlString).digest('hex').slice(0, 10);
+  const finalExt = ext || inferExtensionFromContentType(responseContentType);
+  return `${stem || 'remote-image'}-${hash}${finalExt}`;
+}
+
+async function downloadRemoteImage(urlString: string, assetDir: string): Promise<string> {
+  const response = await fetch(urlString, {
+    redirect: 'follow',
+    headers: {
+      'user-agent': 'buhuaguo-post-x/1.58.0',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`[md-to-html] Failed to download remote image: ${urlString} (${response.status} ${response.statusText})`);
+  }
+
+  const contentType = response.headers.get('content-type');
+  const fileName = inferFilenameFromUrl(urlString, contentType);
+  const localPath = path.join(assetDir, fileName);
+
+  if (!fs.existsSync(localPath)) {
+    const arrayBuffer = await response.arrayBuffer();
+    await writeFile(localPath, Buffer.from(arrayBuffer));
+    console.log(`[md-to-html] Downloaded remote image: ${urlString}`);
+    console.log(`[md-to-html] Saved to local cache: ${localPath}`);
+  }
+
+  return localPath;
+}
+
+async function resolveLocalPath(filePath: string, baseDir: string, assetDir: string): Promise<string> {
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    return await downloadRemoteImage(filePath, assetDir);
+  }
+
+  const localPath = path.isAbsolute(filePath) ? filePath : path.resolve(baseDir, filePath);
+
+  if (!fs.existsSync(localPath)) {
+    throw new Error(`[md-to-html] Local image not found: ${localPath}`);
+  }
+  if (!fs.statSync(localPath).isFile()) {
+    throw new Error(`[md-to-html] Path is not a file: ${localPath}`);
+  }
+
+  return localPath;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function applyInlineMarkdown(text: string): string {
+  let html = escapeHtml(text);
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, href: string) => {
+    return `<a href="${escapeHtml(href)}" rel="noopener noreferrer nofollow">${escapeHtml(label)}</a>`;
+  });
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  return html;
+}
+
+function stripH1(line: string): string {
+  return line.replace(/^#\s+/, '').trim();
+}
+
+function splitTableRow(line: string): string[] {
+  let text = line.trim();
+  if (text.startsWith('|')) text = text.slice(1);
+  if (text.endsWith('|')) text = text.slice(0, -1);
+
+  const cells: string[] = [];
+  let current = '';
+  let escaped = false;
+
+  for (const char of text) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '|') {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseTableAlignment(cell: string): 'left' | 'center' | 'right' | null {
+  const normalized = cell.replace(/\s+/g, '');
+  if (!/^:?-{2,}:?$/.test(normalized)) return null;
+  if (normalized.startsWith(':') && normalized.endsWith(':')) return 'center';
+  if (normalized.endsWith(':')) return 'right';
+  if (normalized.startsWith(':')) return 'left';
+  return 'left';
+}
+
+function isTableSeparatorLine(line: string): boolean {
+  if (!line.includes('|')) return false;
+  const cells = splitTableRow(line);
+  return cells.length > 0 && cells.every((cell) => parseTableAlignment(cell) !== null);
+}
+
+function buildTableHtml(headerLine: string, separatorLine: string, bodyLines: string[]): string {
+  const headers = splitTableRow(headerLine);
+  const alignments = splitTableRow(separatorLine).map((cell) => parseTableAlignment(cell));
+  const headerHtml = headers.map((cell, index) => {
+    const alignment = alignments[index] ?? null;
+    const style = alignment ? ` style="text-align:${alignment}"` : '';
+    return `<th${style}>${applyInlineMarkdown(cell)}</th>`;
+  }).join('');
+
+  const rowsHtml = bodyLines.map((line) => {
+    const cells = splitTableRow(line);
+    const cellsHtml = headers.map((_, index) => {
+      const cell = cells[index] ?? '';
+      const alignment = alignments[index] ?? null;
+      const style = alignment ? ` style="text-align:${alignment}"` : '';
+      return `<td${style}>${applyInlineMarkdown(cell)}</td>`;
+    }).join('');
+    return `<tr>${cellsHtml}</tr>`;
+  }).join('');
+
+  return `<table><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table>`;
+}
+
+function slugifyFileStem(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'article';
+}
+
+function stripMarkdownForTableCell(text: string): string {
+  return text
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/\\\|/g, '|')
+    .trim();
+}
+
+function buildTableScreenshotHtml(
+  headers: string[],
+  alignments: Array<'left' | 'center' | 'right' | null>,
+  rows: string[][],
+): string {
+  const styleText = `
+    :root {
+      color-scheme: light;
+      --border: #d0d7de;
+      --header-bg: #f6f8fa;
+      --text: #111827;
+      --cell-bg: #ffffff;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+    }
+    body {
+      display: inline-block;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+    }
+    #table-shot {
+      display: inline-block;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+    table {
+      border-collapse: collapse;
+      font-size: 15px;
+      line-height: 1.45;
+      min-width: 420px;
+      max-width: 1200px;
+    }
+    thead th {
+      background: var(--header-bg);
+      font-weight: 700;
+    }
+    th, td {
+      padding: 12px 16px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      background: var(--cell-bg);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-width: 360px;
+    }
+    tr:last-child td {
+      border-bottom: 0;
+    }
+    th:last-child, td:last-child {
+      border-right: 0;
+    }
+    p, ul, ol, blockquote, code {
+      margin: 0;
+    }
+    code {
+      font-family: "SFMono-Regular", "Menlo", monospace;
+      font-size: 0.92em;
+      background: rgba(148, 163, 184, 0.14);
+      padding: 0.12em 0.35em;
+      border-radius: 6px;
+    }
+    a {
+      color: #0f766e;
+      text-decoration: none;
+    }
+    strong {
+      font-weight: 700;
+    }
+    em {
+      font-style: italic;
+    }
+  `;
+
+  const headerHtml = headers.map((cell, index) => {
+    const alignment = alignments[index] ?? 'left';
+    return `<th style="text-align:${alignment}">${applyInlineMarkdown(cell)}</th>`;
+  }).join('');
+
+  const rowsHtml = rows.map((row) => {
+    const cellsHtml = headers.map((_, index) => {
+      const alignment = alignments[index] ?? 'left';
+      return `<td style="text-align:${alignment}">${applyInlineMarkdown(row[index] ?? '')}</td>`;
+    }).join('');
+    return `<tr>${cellsHtml}</tr>`;
+  }).join('');
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>${styleText}</style>
+  </head>
+  <body>
+    <div id="table-shot">
+      <table>
+        <thead><tr>${headerHtml}</tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+  </body>
+</html>`;
+}
+
+function renderMarkdownTableToImage(
+  markdownPath: string,
+  assetDir: string,
+  tableIndex: number,
+  headerLine: string,
+  separatorLine: string,
+  bodyLines: string[],
+): string {
+  const headers = splitTableRow(headerLine);
+  const alignments = splitTableRow(separatorLine).map((cell) => parseTableAlignment(cell));
+  const rows = bodyLines.map((line) => splitTableRow(line));
+  const articleStem = slugifyFileStem(path.basename(markdownPath, path.extname(markdownPath)));
+  const imagePath = path.join(assetDir, `${articleStem}-table-${String(tableIndex).padStart(2, '0')}.png`);
+
+  if (fs.existsSync(imagePath)) {
+    return imagePath;
+  }
+
+  const plainHeaders = headers.map((cell) => stripMarkdownForTableCell(cell));
+  const plainRows = rows.map((row) => row.map((cell) => stripMarkdownForTableCell(cell)));
+  const html = buildTableScreenshotHtml(plainHeaders, alignments, plainRows);
+  const tempRoot = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'buhuaguo-table-'));
+  const htmlPath = path.join(tempRoot, 'table.html');
+  fs.writeFileSync(htmlPath, html, 'utf8');
+
+  const browsers: Array<'chromium' | 'webkit'> = ['chromium', 'webkit'];
+  let lastError = '';
+
+  try {
+    for (const browser of browsers) {
+      const result = spawnSync('playwright', [
+        'screenshot',
+        '--browser',
+        browser,
+        '--wait-for-selector',
+        '#table-shot',
+        '--full-page',
+        '--viewport-size',
+        '1600,1200',
+        pathToFileURL(htmlPath).href,
+        imagePath,
+      ], {
+        encoding: 'utf8',
+      });
+
+      if (result.status === 0 && fs.existsSync(imagePath)) {
+        console.log(`[md-to-html] Rendered Markdown table to image: ${imagePath}`);
+        return imagePath;
+      }
+
+      lastError = (result.stderr || result.stdout || `exit ${result.status ?? 'unknown'}`).trim();
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+
+  throw new Error(
+    `[md-to-html] Failed to render Markdown table to image. X Articles do not preserve pasted HTML tables, so table rendering is required. ${lastError}`,
+  );
+}
+
+async function convertMarkdownToHtml(
+  markdown: string,
+  markdownPath: string,
+  baseDir: string,
+  assetDir: string,
+): Promise<{ html: string; totalBlocks: number; contentImages: ImageInfo[] }> {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const htmlBlocks: string[] = [];
+  const paragraphBuffer: string[] = [];
+  const contentImages: ImageInfo[] = [];
+  let placeholderIndex = 0;
+  let tableImageIndex = 0;
+  let inCodeBlock = false;
+  const codeBuffer: string[] = [];
+  let listType: 'ul' | 'ol' | null = null;
+  let listItems: string[] = [];
+
+  const flushParagraph = (): void => {
+    if (paragraphBuffer.length === 0) return;
+    const paragraphText = paragraphBuffer.join(' ').trim();
+    if (paragraphText) {
+      htmlBlocks.push(`<p>${applyInlineMarkdown(paragraphText)}</p>`);
+    }
+    paragraphBuffer.length = 0;
+  };
+
+  const flushList = (): void => {
+    if (!listType || listItems.length === 0) {
+      listType = null;
+      listItems = [];
+      return;
+    }
+    const itemsHtml = listItems.map((item) => `<li>${applyInlineMarkdown(item)}</li>`).join('');
+    htmlBlocks.push(`<${listType}>${itemsHtml}</${listType}>`);
+    listType = null;
+    listItems = [];
+  };
+
+  const pushResolvedImagePlaceholder = (localPath: string, originalPath: string): string => {
+    const placeholder = `XIMGPH_${++placeholderIndex}`;
+    contentImages.push({
+      placeholder,
+      localPath,
+      originalPath,
+      blockIndex: htmlBlocks.length,
+    });
+    return placeholder;
+  };
+
+  const pushImagePlaceholder = async (src: string): Promise<string> => {
+    const localPath = await resolveLocalPath(src, baseDir, assetDir);
+    return pushResolvedImagePlaceholder(localPath, src);
+  };
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const rawLine = lines[lineIndex]!;
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      flushList();
+      if (inCodeBlock) {
+        htmlBlocks.push(`<blockquote><code>${escapeHtml(codeBuffer.join('\n'))}</code></blockquote>`);
+        codeBuffer.length = 0;
+        inCodeBlock = false;
+      } else {
+        flushParagraph();
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeBuffer.push(line);
+      continue;
+    }
+
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const nextLine = lines[lineIndex + 1]?.trim() ?? '';
+    if (trimmed.includes('|') && isTableSeparatorLine(nextLine)) {
+      flushParagraph();
+      flushList();
+
+      const bodyLines: string[] = [];
+      let tableIndex = lineIndex + 2;
+      while (tableIndex < lines.length) {
+        const candidate = lines[tableIndex]!.trim();
+        if (!candidate || !candidate.includes('|')) break;
+        bodyLines.push(candidate);
+        tableIndex += 1;
+      }
+
+      const renderedTablePath = renderMarkdownTableToImage(
+        markdownPath,
+        assetDir,
+        ++tableImageIndex,
+        trimmed,
+        nextLine,
+        bodyLines,
+      );
+      htmlBlocks.push(`<p>${pushResolvedImagePlaceholder(renderedTablePath, `table:${tableImageIndex}`)}</p>`);
+      lineIndex = tableIndex - 1;
+      continue;
+    }
+
+    if (/^#\s+/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      if (stripH1(trimmed)) {
+        continue;
+      }
+    }
+
+    if (/^#{2,}\s+/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      const headingText = trimmed.replace(/^#{2,}\s+/, '');
+      htmlBlocks.push(`<h2>${applyInlineMarkdown(headingText)}</h2>`);
+      continue;
+    }
+
+    if (/^>\s*/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      htmlBlocks.push(`<blockquote>${applyInlineMarkdown(trimmed.replace(/^>\s*/, ''))}</blockquote>`);
+      continue;
+    }
+
+    const unorderedMatch = trimmed.match(/^[-*]\s+(.+)$/);
+    if (unorderedMatch) {
+      flushParagraph();
+      if (listType && listType !== 'ul') flushList();
+      listType = 'ul';
+      listItems.push(unorderedMatch[1]!);
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(/^\d+\.\s+(.+)$/);
+    if (orderedMatch) {
+      flushParagraph();
+      if (listType && listType !== 'ol') flushList();
+      listType = 'ol';
+      listItems.push(orderedMatch[1]!);
+      continue;
+    }
+
+    if (/^---+$/.test(trimmed) || /^___+$/.test(trimmed) || /^\*\*\*+$/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      htmlBlocks.push('<hr>');
+      continue;
+    }
+
+    const imageOnlyMatch = trimmed.match(/^!\[[^\]]*\]\(([^)]+)\)$/);
+    if (imageOnlyMatch) {
+      flushParagraph();
+      flushList();
+      htmlBlocks.push(`<p>${await pushImagePlaceholder(imageOnlyMatch[1]!)}</p>`);
+      continue;
+    }
+
+    flushList();
+    const imageMatches = [...line.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)];
+    let withPlaceholders = line;
+    for (const match of imageMatches) {
+      const original = match[0];
+      const src = match[1];
+      if (!original || !src) continue;
+      const placeholder = await pushImagePlaceholder(src);
+      withPlaceholders = withPlaceholders.replace(original, placeholder);
+    }
+    paragraphBuffer.push(withPlaceholders.trim());
+  }
+
+  flushParagraph();
+  flushList();
+
+  if (inCodeBlock && codeBuffer.length > 0) {
+    htmlBlocks.push(`<blockquote><code>${escapeHtml(codeBuffer.join('\n'))}</code></blockquote>`);
+  }
+
+  return {
+    html: htmlBlocks.join('\n').trim(),
+    totalBlocks: htmlBlocks.length,
+    contentImages,
+  };
+}
+
+export async function parseMarkdown(
+  markdownPath: string,
+  options?: { coverImage?: string; title?: string },
+): Promise<ParsedMarkdown> {
+  const content = fs.readFileSync(markdownPath, 'utf-8');
+  const baseDir = path.dirname(markdownPath);
+  const assetDir = path.join(baseDir, '.buhuaguo-post-x-assets');
+  const { frontmatter, body } = parseFrontmatter(content);
+
+  await mkdir(assetDir, { recursive: true });
+
+  let title = stripWrappingQuotes(options?.title ?? '') || pickFirstString(frontmatter, ['title']) || '';
+  if (!title) {
+    title = extractTitleFromMarkdown(body);
+  }
+  if (!title) {
+    title = path.basename(markdownPath, path.extname(markdownPath));
+  }
+
+  let coverImagePath = stripWrappingQuotes(options?.coverImage ?? '') || pickFirstString(frontmatter, [
+    'cover_image',
+    'coverImage',
+    'cover',
+    'image',
+    'featureImage',
+    'feature_image',
+  ]) || null;
+
+  if (!coverImagePath) {
+    coverImagePath = findCoverImageNearMarkdown(baseDir);
+  }
+
+  const converted = await convertMarkdownToHtml(body, markdownPath, baseDir, assetDir);
+  const resolvedCoverImage = coverImagePath ? await resolveLocalPath(coverImagePath, baseDir, assetDir) : null;
+
+  return {
+    title,
+    coverImage: resolvedCoverImage,
+    contentImages: converted.contentImages,
+    html: converted.html,
+    totalBlocks: converted.totalBlocks,
+  };
+}
+
+function printUsage(): never {
+  console.log(`Convert Markdown to lightweight HTML for X Article drafting
+
+Usage:
+  npx -y bun md-to-html.ts <markdown_file> [options]
+
+Options:
+  --title <title>       Override title from frontmatter
+  --cover <image>       Override cover image from frontmatter
+  --output <json|html>  Output format (default: json)
+  --html-only           Output only the HTML content
+  --save-html <path>    Save HTML to file
+`);
+  process.exit(0);
+}
+
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+    printUsage();
+  }
+
+  let markdownPath: string | undefined;
+  let title: string | undefined;
+  let coverImage: string | undefined;
+  let outputFormat: 'json' | 'html' = 'json';
+  let htmlOnly = false;
+  let saveHtmlPath: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === '--title' && args[i + 1]) {
+      title = args[++i];
+    } else if (arg === '--cover' && args[i + 1]) {
+      coverImage = args[++i];
+    } else if (arg === '--output' && args[i + 1]) {
+      outputFormat = args[++i] as 'json' | 'html';
+    } else if (arg === '--html-only') {
+      htmlOnly = true;
+    } else if (arg === '--save-html' && args[i + 1]) {
+      saveHtmlPath = args[++i];
+    } else if (!arg.startsWith('-')) {
+      markdownPath = arg;
+    }
+  }
+
+  if (!markdownPath) {
+    throw new Error('Markdown file path required');
+  }
+
+  if (!fs.existsSync(markdownPath)) {
+    throw new Error(`File not found: ${markdownPath}`);
+  }
+
+  const result = await parseMarkdown(markdownPath, { title, coverImage });
+
+  if (saveHtmlPath) {
+    await writeFile(saveHtmlPath, result.html, 'utf-8');
+    console.error(`[md-to-html] HTML saved to: ${saveHtmlPath}`);
+  }
+
+  if (htmlOnly || outputFormat === 'html') {
+    console.log(result.html);
+    return;
+  }
+
+  console.log(JSON.stringify(result, null, 2));
+}
+
+if (import.meta.main) {
+  await main().catch((err) => {
+    console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  });
+}
