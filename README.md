@@ -24,6 +24,16 @@ This repository contains only the `buhuaguo-post-x` skill and its required runti
 - Turn Markdown tables into local PNG files so they survive the X Article workflow
 - Use short helper commands like `./xa-next` and `./xa-cover` during publishing
 
+## Docs
+
+- Installation guide: [INSTALL.md](./INSTALL.md)
+- Contribution guide: [CONTRIBUTING.md](./CONTRIBUTING.md)
+- Launch copy: [docs/launch-copy.md](./docs/launch-copy.md)
+
+## Workflow
+
+![Workflow](./assets/buhuaguo-post-x-workflow.svg)
+
 ## English
 
 ### What It Does
@@ -103,6 +113,10 @@ scripts/
 
 Ready-to-post announcement copy lives in [docs/launch-copy.md](./docs/launch-copy.md).
 
+### Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
 ### License
 
 MIT
@@ -116,6 +130,12 @@ MIT
 - 文章中的远程图片会自动变成本地文件
 - Markdown 表格会自动转成 PNG，避免 X Article 吃不下表格
 - 插图时可以直接用 `./xa-next`、`./xa-cover` 这类短命令
+
+## 文档入口
+
+- 安装说明：[INSTALL.md](./INSTALL.md)
+- 贡献指南：[CONTRIBUTING.md](./CONTRIBUTING.md)
+- 发布文案：[docs/launch-copy.md](./docs/launch-copy.md)
 
 ### 这个项目做什么
 
@@ -190,6 +210,10 @@ cd "$(dirname ./article.md)"
 ### 发布文案
 
 可直接复制使用的项目发布文案在 [docs/launch-copy.md](./docs/launch-copy.md)。
+
+### 参与贡献
+
+如果以后你想继续迭代这个项目，可以先看 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ### 许可证
 
