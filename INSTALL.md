@@ -17,8 +17,14 @@ npm install -g playwright
 ### Install Into Claude
 
 ```bash
-mkdir -p ~/.claude/skills
-cp -R ./buhuaguo-post-x ~/.claude/skills/buhuaguo-post-x
+git clone https://github.com/SIXIANGGUO/buhuaguo-post-x ~/.claude/skills/buhuaguo-post-x
+```
+
+If you already have a local copy and want to install from the current directory instead:
+
+```bash
+mkdir -p ~/.claude/skills/buhuaguo-post-x
+rsync -a --exclude '.git' ./ ~/.claude/skills/buhuaguo-post-x/
 ```
 
 ### Verify
@@ -60,8 +66,14 @@ npm install -g playwright
 ### 安装到 Claude
 
 ```bash
-mkdir -p ~/.claude/skills
-cp -R ./buhuaguo-post-x ~/.claude/skills/buhuaguo-post-x
+git clone https://github.com/SIXIANGGUO/buhuaguo-post-x ~/.claude/skills/buhuaguo-post-x
+```
+
+如果你已经有本地仓库，也可以在当前目录直接安装：
+
+```bash
+mkdir -p ~/.claude/skills/buhuaguo-post-x
+rsync -a --exclude '.git' ./ ~/.claude/skills/buhuaguo-post-x/
 ```
 
 ### 验证安装

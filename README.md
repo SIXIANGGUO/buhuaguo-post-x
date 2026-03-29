@@ -32,11 +32,6 @@ This repository contains only the `buhuaguo-post-x` skill and its required runti
 
 - Installation guide: [INSTALL.md](./INSTALL.md)
 - Contribution guide: [CONTRIBUTING.md](./CONTRIBUTING.md)
-- Launch copy: [docs/launch-copy.md](./docs/launch-copy.md)
-
-## Workflow
-
-![Workflow](./assets/buhuaguo-post-x-workflow.png)
 
 <a id="english"></a>
 ## English
@@ -114,10 +109,6 @@ references/
 scripts/
 ```
 
-### Launch Copy
-
-Ready-to-post announcement copy lives in [docs/launch-copy.md](./docs/launch-copy.md).
-
 ### Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md).
@@ -141,7 +132,6 @@ MIT
 
 - 安装说明：[INSTALL.md](./INSTALL.md)
 - 贡献指南：[CONTRIBUTING.md](./CONTRIBUTING.md)
-- 发布文案：[docs/launch-copy.md](./docs/launch-copy.md)
 
 ### 这个项目做什么
 
@@ -212,10 +202,6 @@ cd "$(dirname ./article.md)"
 ### 仓库边界
 
 这个仓库只发布 `buhuaguo-post-x` 自身所需的文件，不包含不相关的 skill、历史残留目录或无关发布脚本。
-
-### 发布文案
-
-可直接复制使用的项目发布文案在 [docs/launch-copy.md](./docs/launch-copy.md)。
 
 ### 参与贡献
 
