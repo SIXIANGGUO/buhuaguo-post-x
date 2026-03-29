@@ -36,7 +36,7 @@ It focuses on a practical manual workflow:
 ### Requirements
 
 - `bun` or `npx -y bun`
-- `playwright`
+- `playwright` available in `PATH`
 - A working system clipboard on your platform
 
 ### Install
@@ -46,6 +46,12 @@ Clone or copy this repo, then place the folder in your Claude skills directory:
 ```bash
 mkdir -p ~/.claude/skills
 cp -R ./buhuaguo-post-x ~/.claude/skills/buhuaguo-post-x
+```
+
+If `playwright` is not already available in your shell, install it first so Markdown tables can be rendered into PNG files:
+
+```bash
+npm install -g playwright
 ```
 
 ### Quick Start
@@ -72,6 +78,10 @@ SKILL.md
 references/
 scripts/
 ```
+
+### License
+
+MIT
 
 ## 中文说明
 
@@ -106,7 +116,7 @@ scripts/
 ### 依赖要求
 
 - `bun` 或 `npx -y bun`
-- `playwright`
+- `playwright` 命令可直接在终端中使用
 - 系统剪贴板可用
 
 ### 安装方式
@@ -116,6 +126,12 @@ scripts/
 ```bash
 mkdir -p ~/.claude/skills
 cp -R ./buhuaguo-post-x ~/.claude/skills/buhuaguo-post-x
+```
+
+如果你的终端里还没有 `playwright` 命令，先安装它，这样 Markdown 表格才能自动转成 PNG：
+
+```bash
+npm install -g playwright
 ```
 
 ### 快速使用
@@ -138,3 +154,7 @@ cd "$(dirname ./article.md)"
 ### 仓库边界
 
 这个仓库只发布 `buhuaguo-post-x` 自身所需的文件，不包含不相关的 skill、历史残留目录或无关发布脚本。
+
+### 许可证
+
+MIT
