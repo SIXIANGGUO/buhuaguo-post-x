@@ -71,11 +71,17 @@ It focuses on a practical manual workflow:
 
 ### Install
 
-Clone or copy this repo, then place the folder in your Claude skills directory:
+Install into Claude:
 
 ```bash
-mkdir -p ~/.claude/skills
-cp -R ./buhuaguo-post-x ~/.claude/skills/buhuaguo-post-x
+git clone https://github.com/SIXIANGGUO/buhuaguo-post-x ~/.claude/skills/buhuaguo-post-x
+```
+
+If you already have a local copy and want to install from the current directory instead:
+
+```bash
+mkdir -p ~/.claude/skills/buhuaguo-post-x
+rsync -a --exclude '.git' ./ ~/.claude/skills/buhuaguo-post-x/
 ```
 
 If `playwright` is not already available in your shell, install it first so Markdown tables can be rendered into PNG files:
@@ -92,14 +98,36 @@ Regular post:
 bun scripts/x-browser.ts "Hello world" --image ./photo.png
 ```
 
+Result:
+- The post text is copied to your clipboard
+- The terminal prints a preview such as `[Image: photo.png]`
+- The terminal also prints the absolute local image path for manual insertion
+
 X Article:
 
 ```bash
 bun scripts/x-article.ts ./article.md
+```
+
+Result:
+- The article body is copied to your clipboard as rich text
+- Remote images are downloaded into `.buhuaguo-post-x-assets/` when needed
+- Markdown tables are rendered into local PNG files
+- Short helper commands such as `./xa-next` and `./xa-cover` are generated next to the article
+
+Then publish manually in X with these steps:
+
+```bash
 cd "$(dirname ./article.md)"
 ./xa-cover
 ./xa-next
 ```
+
+Result:
+- `./xa-cover` copies the cover image to your clipboard
+- `./xa-next` copies the next body image or rendered table image to your clipboard
+- Run `./xa-next` once for each placeholder in the article
+- You can also use `./xa-peek`, `./xa-prev`, and `./xa-status` during insertion
 
 ### Repository Layout
 
@@ -169,11 +197,17 @@ MIT
 
 ### 安装方式
 
-把这个仓库放到 Claude 的 skills 目录：
+安装到 Claude：
 
 ```bash
-mkdir -p ~/.claude/skills
-cp -R ./buhuaguo-post-x ~/.claude/skills/buhuaguo-post-x
+git clone https://github.com/SIXIANGGUO/buhuaguo-post-x ~/.claude/skills/buhuaguo-post-x
+```
+
+如果你已经有本地仓库，也可以在当前目录直接安装：
+
+```bash
+mkdir -p ~/.claude/skills/buhuaguo-post-x
+rsync -a --exclude '.git' ./ ~/.claude/skills/buhuaguo-post-x/
 ```
 
 如果你的终端里还没有 `playwright` 命令，先安装它，这样 Markdown 表格才能自动转成 PNG：
@@ -190,14 +224,46 @@ npm install -g playwright
 bun scripts/x-browser.ts "你好，X" --image ./photo.png
 ```
 
+运行结果：
+- 帖子正文会进入剪贴板
+- 终端里会看到类似 `[Image: photo.png]` 的占位预览
+- 终端也会打印图片的本地绝对路径，方便你手动插入
+
 文章发布：
 
 ```bash
 bun scripts/x-article.ts ./article.md
+```
+
+运行结果：
+- 文章正文会以富文本形式进入剪贴板
+- 如果正文里有远程图片，会自动下载到 `.buhuaguo-post-x-assets/`
+- Markdown 表格会自动转成 PNG
+- 文章同目录会生成 `./xa-next`、`./xa-cover` 这些短命令
+
+接下来在 X 里手动发布时，按这个顺序做：
+
+1. 先把正文粘贴进 X Article 编辑器
+2. 进入文章所在目录
+
+```bash
 cd "$(dirname ./article.md)"
 ./xa-cover
+```
+
+运行结果：
+- 封面图会进入剪贴板，你可以直接去 X 里粘贴
+
+然后每到一个图片或表格占位时，执行：
+
+```bash
 ./xa-next
 ```
+
+运行结果：
+- 下一张正文图片或表格图片会进入剪贴板
+- 每执行一次，就会自动推进到下一张
+- 过程中还可以用 `./xa-peek`、`./xa-prev`、`./xa-status`
 
 ### 仓库边界
 
