@@ -1,8 +1,28 @@
+<p align="center">
+  <img src="./assets/buhuaguo-post-x-hero.svg" alt="buhuaguo-post-x hero" width="960">
+</p>
+
+<p align="center">
+  <a href="https://github.com/SIXIANGGUO/buhuaguo-post-x/releases/tag/v1.58.0"><img src="https://img.shields.io/github/v/release/SIXIANGGUO/buhuaguo-post-x?display_name=tag&style=flat-square" alt="Release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/SIXIANGGUO/buhuaguo-post-x?style=flat-square" alt="License"></a>
+  <img src="https://img.shields.io/badge/Mode-Clipboard--First-0f766e?style=flat-square" alt="Clipboard First">
+  <img src="https://img.shields.io/badge/X%20Articles-Table%20to%20PNG-0f172a?style=flat-square" alt="Table to PNG">
+  <img src="https://img.shields.io/badge/Helpers-xa--next%20%7C%20xa--cover-c2410c?style=flat-square" alt="Helper Commands">
+</p>
+
 # buhuaguo-post-x
 
 Clipboard-first publishing skill for X posts and X Articles.
 
 This repository contains only the `buhuaguo-post-x` skill and its required runtime files. It does not bundle unrelated skills, unrelated utilities, or other publishing workflows.
+
+## At a Glance
+
+- Prepare X posts and X Articles without browser posting automation
+- Paste polished article body first, then insert media manually in a stable order
+- Turn remote article images into local files automatically
+- Turn Markdown tables into local PNG files so they survive the X Article workflow
+- Use short helper commands like `./xa-next` and `./xa-cover` during publishing
 
 ## English
 
@@ -79,11 +99,23 @@ references/
 scripts/
 ```
 
+### Launch Copy
+
+Ready-to-post announcement copy lives in [docs/launch-copy.md](./docs/launch-copy.md).
+
 ### License
 
 MIT
 
 ## 中文说明
+
+## 一眼看懂
+
+- 不做 X 页面自动发布，只做内容准备
+- 先粘贴更干净的正文，再按顺序插入图片
+- 文章中的远程图片会自动变成本地文件
+- Markdown 表格会自动转成 PNG，避免 X Article 吃不下表格
+- 插图时可以直接用 `./xa-next`、`./xa-cover` 这类短命令
 
 ### 这个项目做什么
 
@@ -154,6 +186,10 @@ cd "$(dirname ./article.md)"
 ### 仓库边界
 
 这个仓库只发布 `buhuaguo-post-x` 自身所需的文件，不包含不相关的 skill、历史残留目录或无关发布脚本。
+
+### 发布文案
+
+可直接复制使用的项目发布文案在 [docs/launch-copy.md](./docs/launch-copy.md)。
 
 ### 许可证
 
