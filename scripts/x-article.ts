@@ -106,7 +106,7 @@ export async function publishArticle(options: ArticleOptions): Promise<void> {
   for (let i = 0; i < parsed.contentImages.length; i++) {
     const source = parsed.contentImages[i]!;
     const prepared = preparedImages[i]!;
-    const replacement = `<p>${escapeHtml(prepared.placeholder)}</p>`;
+    const replacement = `<div>${escapeHtml(prepared.placeholder)}</div>`;
     htmlForClipboard = htmlForClipboard.replace(source.placeholder, replacement);
   }
 

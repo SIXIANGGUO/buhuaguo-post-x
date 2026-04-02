@@ -210,6 +210,7 @@ function readUtf8File(filePath) {
 function stripHtml(html) {
   return html
     .replace(/<br\\s*\\/?>/gi, '\\n')
+    .replace(/<\\/div>/gi, '\\n')
     .replace(/<\\/p>/gi, '\\n\\n')
     .replace(/<\\/h[1-6]>/gi, '\\n\\n')
     .replace(/<\\/li>/gi, '\\n')
@@ -296,6 +297,7 @@ async function copyHtmlMac(htmlFilePath: string): Promise<void> {
     const html = fs.readFileSync(htmlFilePath, 'utf8');
     const plainText = html
       .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/div>/gi, '\n')
       .replace(/<\/p>/gi, '\n\n')
       .replace(/<\/h[1-6]>/gi, '\n\n')
       .replace(/<\/blockquote>/gi, '\n\n')

@@ -192,6 +192,18 @@ function applyInlineMarkdown(text: string): string {
   return html;
 }
 
+function renderCompactParagraph(content: string): string {
+  return `<div>${content}</div>`;
+}
+
+function renderCompactPlaceholder(content: string): string {
+  return `<div>${escapeHtml(content)}</div>`;
+}
+
+function renderCompactHeading(content: string): string {
+  return `<div><strong>${applyInlineMarkdown(content)}</strong></div>`;
+}
+
 function stripH1(line: string): string {
   return line.replace(/^#\s+/, '').trim();
 }
@@ -476,7 +488,7 @@ async function convertMarkdownToHtml(
     if (paragraphBuffer.length === 0) return;
     const paragraphText = paragraphBuffer.join(' ').trim();
     if (paragraphText) {
-      htmlBlocks.push(`<p>${applyInlineMarkdown(paragraphText)}</p>`);
+      htmlBlocks.push(renderCompactParagraph(applyInlineMarkdown(paragraphText)));
     }
     paragraphBuffer.length = 0;
   };
@@ -560,7 +572,7 @@ async function convertMarkdownToHtml(
         nextLine,
         bodyLines,
       );
-      htmlBlocks.push(`<p>${pushResolvedImagePlaceholder(renderedTablePath, `table:${tableImageIndex}`)}</p>`);
+      htmlBlocks.push(renderCompactPlaceholder(pushResolvedImagePlaceholder(renderedTablePath, `table:${tableImageIndex}`)));
       lineIndex = tableIndex - 1;
       continue;
     }
@@ -577,7 +589,7 @@ async function convertMarkdownToHtml(
       flushParagraph();
       flushList();
       const headingText = trimmed.replace(/^#{2,}\s+/, '');
-      htmlBlocks.push(`<h2>${applyInlineMarkdown(headingText)}</h2>`);
+      htmlBlocks.push(renderCompactHeading(headingText));
       continue;
     }
 
@@ -617,7 +629,7 @@ async function convertMarkdownToHtml(
     if (imageOnlyMatch) {
       flushParagraph();
       flushList();
-      htmlBlocks.push(`<p>${await pushImagePlaceholder(imageOnlyMatch[1]!)}</p>`);
+      htmlBlocks.push(renderCompactPlaceholder(await pushImagePlaceholder(imageOnlyMatch[1]!)));
       continue;
     }
 
