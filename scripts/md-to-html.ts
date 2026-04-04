@@ -464,10 +464,6 @@ function renderMarkdownTableToImage(
   const articleStem = slugifyFileStem(path.basename(markdownPath, path.extname(markdownPath)));
   const imagePath = path.join(assetDir, `${articleStem}-table-${String(tableIndex).padStart(2, '0')}.png`);
 
-  if (fs.existsSync(imagePath)) {
-    return imagePath;
-  }
-
   const plainHeaders = headers.map((cell) => stripMarkdownForTableCell(cell));
   const plainRows = rows.map((row) => row.map((cell) => stripMarkdownForTableCell(cell)));
   const html = buildTableScreenshotHtml(plainHeaders, alignments, plainRows);
