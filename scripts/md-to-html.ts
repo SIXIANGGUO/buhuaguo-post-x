@@ -206,8 +206,24 @@ function renderCompactHeading(content: string): string {
 
 function renderCodeBlock(code: string, language?: string): string {
   const escapedCode = escapeHtml(code);
-  const languageLabel = language?.trim() ? `<div style="font-size:12px;color:#6b7280;margin-bottom:6px;">${escapeHtml(language.trim())}</div>` : '';
-  return `<div>${languageLabel}<pre style="margin:0;white-space:pre-wrap;word-break:break-word;font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13px;line-height:1.55;background:#f6f8fa;border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;overflow-x:auto;"><code>${escapedCode}</code></pre></div>`;
+  const languageLabel = language?.trim()
+    ? `<div style="font-size:11px;color:#6b7280;margin-bottom:7px;text-transform:lowercase;letter-spacing:0.04em;">${escapeHtml(language.trim())}</div>`
+    : '';
+  return `<div>${languageLabel}<pre style="margin:0;white-space:pre-wrap;word-break:break-word;font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12.5px;line-height:1.6;background:#f8fafc;border:1px solid #dbe4ee;border-radius:10px;padding:12px 14px;overflow-x:auto;color:#0f172a;"><code>${escapedCode}</code></pre></div>`;
+}
+
+function renderBlockquote(lines: string[]): string {
+  const renderedLines = lines
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => `<div>${applyInlineMarkdown(line)}</div>`)
+    .join('');
+
+  if (!renderedLines) {
+    return '';
+  }
+
+  return `<blockquote style="margin:0;padding-left:14px;border-left:4px solid #4b5563;color:#111827;"><div style="display:grid;gap:10px;">${renderedLines}</div></blockquote>`;
 }
 
 function stripH1(line: string): string {
@@ -333,30 +349,30 @@ function buildTableScreenshotHtml(
       display: inline-block;
       background: #ffffff;
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 12px;
       overflow: hidden;
       box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
     }
     table {
       border-collapse: collapse;
-      font-size: 15px;
-      line-height: 1.45;
-      min-width: 420px;
-      max-width: 1200px;
+      font-size: 14px;
+      line-height: 1.55;
+      min-width: 0;
+      max-width: 1080px;
     }
     thead th {
       background: var(--header-bg);
       font-weight: 700;
     }
     th, td {
-      padding: 12px 16px;
+      padding: 10px 14px;
       border-right: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
       vertical-align: top;
       background: var(--cell-bg);
       white-space: pre-wrap;
       word-break: break-word;
-      max-width: 360px;
+      max-width: 320px;
     }
     tr:last-child td {
       border-bottom: 0;
@@ -492,6 +508,7 @@ async function convertMarkdownToHtml(
   let inCodeBlock = false;
   const codeBuffer: string[] = [];
   let codeFenceLanguage: string | undefined;
+  let blockquoteBuffer: string[] = [];
   let listType: 'ul' | 'ol' | null = null;
   let listItems: string[] = [];
 
@@ -514,6 +531,15 @@ async function convertMarkdownToHtml(
     htmlBlocks.push(`<${listType}>${itemsHtml}</${listType}>`);
     listType = null;
     listItems = [];
+  };
+
+  const flushBlockquote = (): void => {
+    if (blockquoteBuffer.length === 0) return;
+    const html = renderBlockquote(blockquoteBuffer);
+    if (html) {
+      htmlBlocks.push(html);
+    }
+    blockquoteBuffer = [];
   };
 
   const pushResolvedImagePlaceholder = (localPath: string, originalPath: string): string => {
@@ -539,6 +565,7 @@ async function convertMarkdownToHtml(
 
     if (trimmed.startsWith('```')) {
       flushList();
+      flushBlockquote();
       if (inCodeBlock) {
         htmlBlocks.push(renderCodeBlock(codeBuffer.join('\n'), codeFenceLanguage));
         codeBuffer.length = 0;
@@ -560,6 +587,14 @@ async function convertMarkdownToHtml(
     if (!trimmed) {
       flushParagraph();
       flushList();
+      flushBlockquote();
+      continue;
+    }
+
+    if (/^\s*>\s?/.test(rawLine)) {
+      flushParagraph();
+      flushList();
+      blockquoteBuffer.push(rawLine.replace(/^\s*>\s?/, '').trimEnd());
       continue;
     }
 
@@ -567,6 +602,7 @@ async function convertMarkdownToHtml(
     if (trimmed.includes('|') && isTableSeparatorLine(nextLine)) {
       flushParagraph();
       flushList();
+      flushBlockquote();
 
       const bodyLines: string[] = [];
       let tableIndex = lineIndex + 2;
@@ -593,6 +629,7 @@ async function convertMarkdownToHtml(
     if (/^#\s+/.test(trimmed)) {
       flushParagraph();
       flushList();
+      flushBlockquote();
       if (stripH1(trimmed)) {
         continue;
       }
@@ -601,21 +638,16 @@ async function convertMarkdownToHtml(
     if (/^#{2,}\s+/.test(trimmed)) {
       flushParagraph();
       flushList();
+      flushBlockquote();
       const headingText = trimmed.replace(/^#{2,}\s+/, '');
       htmlBlocks.push(renderCompactHeading(headingText));
-      continue;
-    }
-
-    if (/^>\s*/.test(trimmed)) {
-      flushParagraph();
-      flushList();
-      htmlBlocks.push(`<blockquote>${applyInlineMarkdown(trimmed.replace(/^>\s*/, ''))}</blockquote>`);
       continue;
     }
 
     const unorderedMatch = trimmed.match(/^[-*]\s+(.+)$/);
     if (unorderedMatch) {
       flushParagraph();
+      flushBlockquote();
       if (listType && listType !== 'ul') flushList();
       listType = 'ul';
       listItems.push(unorderedMatch[1]!);
@@ -625,6 +657,7 @@ async function convertMarkdownToHtml(
     const orderedMatch = trimmed.match(/^\d+\.\s+(.+)$/);
     if (orderedMatch) {
       flushParagraph();
+      flushBlockquote();
       if (listType && listType !== 'ol') flushList();
       listType = 'ol';
       listItems.push(orderedMatch[1]!);
@@ -634,6 +667,7 @@ async function convertMarkdownToHtml(
     if (/^---+$/.test(trimmed) || /^___+$/.test(trimmed) || /^\*\*\*+$/.test(trimmed)) {
       flushParagraph();
       flushList();
+      flushBlockquote();
       htmlBlocks.push('<hr>');
       continue;
     }
@@ -642,11 +676,13 @@ async function convertMarkdownToHtml(
     if (imageOnlyMatch) {
       flushParagraph();
       flushList();
+      flushBlockquote();
       htmlBlocks.push(renderCompactPlaceholder(await pushImagePlaceholder(imageOnlyMatch[1]!)));
       continue;
     }
 
     flushList();
+    flushBlockquote();
     const imageMatches = [...line.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)];
     let withPlaceholders = line;
     for (const match of imageMatches) {
@@ -661,6 +697,7 @@ async function convertMarkdownToHtml(
 
   flushParagraph();
   flushList();
+  flushBlockquote();
 
   if (inCodeBlock && codeBuffer.length > 0) {
     htmlBlocks.push(renderCodeBlock(codeBuffer.join('\n'), codeFenceLanguage));
