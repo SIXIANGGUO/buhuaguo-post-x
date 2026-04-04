@@ -193,15 +193,18 @@ function applyInlineMarkdown(text: string): string {
 }
 
 function renderCompactParagraph(content: string): string {
-  return `<div>${content}</div>`;
+  return `<div style="line-height:1.72;color:#111827;">${content}</div>`;
 }
 
 function renderCompactPlaceholder(content: string): string {
-  return `<div>${escapeHtml(content)}</div>`;
+  return `<div style="line-height:1.6;color:#475569;font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13px;">${escapeHtml(content)}</div>`;
 }
 
-function renderCompactHeading(content: string): string {
-  return `<div><strong>${applyInlineMarkdown(content)}</strong></div>`;
+function renderCompactHeading(content: string, level = 2): string {
+  const fontSize = level <= 2 ? '22px' : level === 3 ? '19px' : '17px';
+  const marginTop = level <= 2 ? '16px' : '12px';
+  const marginBottom = level <= 2 ? '8px' : '6px';
+  return `<div style="font-size:${fontSize};line-height:1.35;font-weight:700;color:#111827;margin-top:${marginTop};margin-bottom:${marginBottom};"><strong>${applyInlineMarkdown(content)}</strong></div>`;
 }
 
 function renderCodeBlock(code: string, language?: string): string {
@@ -209,7 +212,7 @@ function renderCodeBlock(code: string, language?: string): string {
   const languageLabel = language?.trim()
     ? `<div style="font-size:11px;color:#6b7280;margin-bottom:7px;text-transform:lowercase;letter-spacing:0.04em;">${escapeHtml(language.trim())}</div>`
     : '';
-  return `<div>${languageLabel}<pre style="margin:0;white-space:pre-wrap;word-break:break-word;font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12.5px;line-height:1.6;background:#f8fafc;border:1px solid #dbe4ee;border-radius:10px;padding:12px 14px;overflow-x:auto;color:#0f172a;"><code>${escapedCode}</code></pre></div>`;
+  return `<div>${languageLabel}<pre style="margin:0;white-space:pre;font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12.5px;line-height:1.58;background:#f8fafc;border:1px solid #dbe4ee;border-radius:10px;padding:12px 14px;overflow-x:auto;color:#0f172a;"><code>${escapedCode}</code></pre></div>`;
 }
 
 function renderBlockquote(lines: string[]): string {
@@ -223,7 +226,19 @@ function renderBlockquote(lines: string[]): string {
     return '';
   }
 
-  return `<blockquote style="margin:0;padding-left:14px;border-left:4px solid #4b5563;color:#111827;"><div style="display:grid;gap:10px;">${renderedLines}</div></blockquote>`;
+  return `<blockquote style="margin:0;padding-left:14px;border-left:4px solid #4b5563;color:#111827;"><div style="display:grid;gap:8px;line-height:1.72;">${renderedLines}</div></blockquote>`;
+}
+
+function renderList(listType: 'ul' | 'ol', items: string[]): string {
+  const tag = listType;
+  const itemsHtml = items
+    .map((item) => `<li style="margin:0 0 6px 0;line-height:1.72;">${applyInlineMarkdown(item)}</li>`)
+    .join('');
+  return `<${tag} style="margin:0;padding-left:1.35em;color:#111827;">${itemsHtml}</${tag}>`;
+}
+
+function renderDivider(): string {
+  return '<div style="height:1px;background:#d1d5db;margin:12px 0 8px 0;"></div>';
 }
 
 function stripH1(line: string): string {
@@ -527,8 +542,7 @@ async function convertMarkdownToHtml(
       listItems = [];
       return;
     }
-    const itemsHtml = listItems.map((item) => `<li>${applyInlineMarkdown(item)}</li>`).join('');
-    htmlBlocks.push(`<${listType}>${itemsHtml}</${listType}>`);
+    htmlBlocks.push(renderList(listType, listItems));
     listType = null;
     listItems = [];
   };
@@ -635,12 +649,13 @@ async function convertMarkdownToHtml(
       }
     }
 
-    if (/^#{2,}\s+/.test(trimmed)) {
+    if (/^#{2,6}\s+/.test(trimmed)) {
       flushParagraph();
       flushList();
       flushBlockquote();
-      const headingText = trimmed.replace(/^#{2,}\s+/, '');
-      htmlBlocks.push(renderCompactHeading(headingText));
+      const level = Math.min(6, (trimmed.match(/^#+/)?.[0]?.length ?? 2));
+      const headingText = trimmed.replace(/^#{2,6}\s+/, '');
+      htmlBlocks.push(renderCompactHeading(headingText, level));
       continue;
     }
 
@@ -668,7 +683,7 @@ async function convertMarkdownToHtml(
       flushParagraph();
       flushList();
       flushBlockquote();
-      htmlBlocks.push('<hr>');
+      htmlBlocks.push(renderDivider());
       continue;
     }
 
