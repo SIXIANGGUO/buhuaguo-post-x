@@ -366,14 +366,15 @@ function buildTableScreenshotHtml(
       border: 1px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
     }
     table {
       border-collapse: collapse;
       font-size: 14px;
       line-height: 1.55;
-      min-width: 0;
-      max-width: 1080px;
+      width: max-content;
+      min-width: 560px;
+      max-width: none;
+      table-layout: auto;
     }
     thead th {
       background: var(--header-bg);
@@ -386,8 +387,10 @@ function buildTableScreenshotHtml(
       vertical-align: top;
       background: var(--cell-bg);
       white-space: pre-wrap;
-      word-break: break-word;
-      max-width: 320px;
+      word-break: normal;
+      overflow-wrap: anywhere;
+      min-width: 160px;
+      max-width: 340px;
     }
     tr:last-child td {
       border-bottom: 0;
@@ -470,6 +473,7 @@ function renderMarkdownTableToImage(
   const html = buildTableScreenshotHtml(plainHeaders, alignments, plainRows);
   const tempRoot = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'buhuaguo-table-'));
   const htmlPath = path.join(tempRoot, 'table.html');
+  const rawImagePath = path.join(tempRoot, 'table-raw.png');
   fs.writeFileSync(htmlPath, html, 'utf8');
 
   const browsers: Array<'chromium' | 'webkit'> = ['chromium', 'webkit'];
@@ -485,14 +489,47 @@ function renderMarkdownTableToImage(
         '#table-shot',
         '--full-page',
         '--viewport-size',
-        '32,32',
+        '1600,1200',
         pathToFileURL(htmlPath).href,
-        imagePath,
+        rawImagePath,
       ], {
         encoding: 'utf8',
       });
 
-      if (result.status === 0 && fs.existsSync(imagePath)) {
+      if (result.status === 0 && fs.existsSync(rawImagePath)) {
+        const trimResult = spawnSync('python3', ['-c', `
+from PIL import Image, ImageChops
+import sys
+
+source_path = sys.argv[1]
+target_path = sys.argv[2]
+
+image = Image.open(source_path).convert("RGB")
+background = Image.new("RGB", image.size, (255, 255, 255))
+difference = ImageChops.difference(image, background)
+bbox = difference.getbbox()
+
+if bbox is None:
+    cropped = image
+else:
+    left, top, right, bottom = bbox
+    padding = 10
+    left = max(0, left - padding)
+    top = max(0, top - padding)
+    right = min(image.size[0], right + padding)
+    bottom = min(image.size[1], bottom + padding)
+    cropped = image.crop((left, top, right, bottom))
+
+cropped.save(target_path)
+`, rawImagePath, imagePath], {
+          encoding: 'utf8',
+        });
+
+        if (trimResult.status !== 0) {
+          lastError = (trimResult.stderr || trimResult.stdout || `trim exit ${trimResult.status ?? 'unknown'}`).trim();
+          continue;
+        }
+
         console.log(`[md-to-html] Rendered Markdown table to image: ${imagePath}`);
         return imagePath;
       }
