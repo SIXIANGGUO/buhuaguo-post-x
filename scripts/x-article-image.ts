@@ -6,6 +6,7 @@ import {
   getManifestPath,
   readArticleImageManifest,
   readArticleImageState,
+  removeArticleHelperScripts,
   writeArticleImageState,
 } from './article-images.js';
 import { copyImageFileToClipboard } from './clipboard-flow.js';
@@ -72,6 +73,13 @@ function copyCover(markdownPath: string): void {
   copyImageFileToClipboard(manifest.cover.absolutePath);
   console.log(`[x-article-image] Copied cover ${manifest.cover.placeholder}`);
   console.log(`[x-article-image] File: ${manifest.cover.absolutePath}`);
+
+  if (manifest.images.length === 0) {
+    const removedHelpers = removeArticleHelperScripts(markdownPath);
+    if (removedHelpers.length > 0) {
+      console.log('[x-article-image] Cleaned up helper scripts from the article directory.');
+    }
+  }
 }
 
 function getTotalImages(markdownPath: string): number {
@@ -125,6 +133,10 @@ function copyByIndex(markdownPath: string, zeroBasedIndex: number, nextIndexAfte
     console.log(`[x-article-image] Next up: ${next.placeholder}`);
   } else {
     console.log('[x-article-image] This was the last image.');
+    const removedHelpers = removeArticleHelperScripts(markdownPath);
+    if (removedHelpers.length > 0) {
+      console.log('[x-article-image] Cleaned up helper scripts from the article directory.');
+    }
   }
 }
 

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-import { writeArticleImageManifest, writeArticleImageState } from './article-images.js';
+import { getArticleHelperPaths, writeArticleImageManifest, writeArticleImageState } from './article-images.js';
 import { parseMarkdown } from './md-to-html.js';
 import {
   copyHtmlToClipboard,
@@ -24,67 +24,30 @@ function writeHelperScript(scriptPath: string, scriptBody: string): void {
 }
 
 function writeArticleHelperScripts(markdownPath: string): string[] {
-  const articleDir = path.dirname(path.resolve(markdownPath));
   const imageHelperPath = process.argv[1]
     ? process.argv[1].replace('x-article.ts', 'x-article-image.ts')
     : 'x-article-image.ts';
-
+  const articleDir = path.dirname(path.resolve(markdownPath));
   const scripts = [
-    {
-      name: 'xa-next',
-      args: '--next',
-    },
-    {
-      name: 'xa-cover',
-      args: '--copy-cover',
-    },
-    {
-      name: 'xa-peek',
-      args: '--peek',
-    },
-    {
-      name: 'xa-prev',
-      args: '--prev',
-    },
-    {
-      name: 'xa-status',
-      args: '--status',
-    },
-    {
-      name: 'xa-open',
-      args: '--open-folder',
-    },
-    {
-      name: '.x-article-next',
-      args: '--next',
-    },
-    {
-      name: '.x-article-cover',
-      args: '--copy-cover',
-    },
-    {
-      name: '.x-article-peek',
-      args: '--peek',
-    },
-    {
-      name: '.x-article-prev',
-      args: '--prev',
-    },
-    {
-      name: '.x-article-status',
-      args: '--status',
-    },
-    {
-      name: '.x-article-open',
-      args: '--open-folder',
-    },
-  ];
+    ['xa-next', '--next'],
+    ['xa-cover', '--copy-cover'],
+    ['xa-peek', '--peek'],
+    ['xa-prev', '--prev'],
+    ['xa-status', '--status'],
+    ['xa-open', '--open-folder'],
+    ['.x-article-next', '--next'],
+    ['.x-article-cover', '--copy-cover'],
+    ['.x-article-peek', '--peek'],
+    ['.x-article-prev', '--prev'],
+    ['.x-article-status', '--status'],
+    ['.x-article-open', '--open-folder'],
+  ] as const;
 
   const createdPaths: string[] = [];
-  for (const item of scripts) {
-    const scriptPath = path.join(articleDir, item.name);
+  for (const [name, args] of scripts) {
+    const scriptPath = path.join(articleDir, name);
     const scriptBody = `#!/bin/zsh
-exec bun ${JSON.stringify(imageHelperPath)} ${JSON.stringify(markdownPath)} ${item.args} "$@"
+exec bun ${JSON.stringify(imageHelperPath)} ${JSON.stringify(markdownPath)} ${args} "$@"
 `;
     writeHelperScript(scriptPath, scriptBody);
     createdPaths.push(scriptPath);
@@ -129,7 +92,8 @@ export async function publishArticle(options: ArticleOptions): Promise<void> {
     })),
   });
   writeArticleImageState(options.markdownPath, 0);
-  const helperScripts = writeArticleHelperScripts(options.markdownPath);
+  const shouldCreateHelpers = Boolean(preparedCover) || preparedImages.length > 0;
+  const helperScripts = shouldCreateHelpers ? writeArticleHelperScripts(options.markdownPath) : [];
 
   console.log('[x-article] Copied article body to clipboard.');
   console.log(`[x-article] Title: ${parsed.title}`);
@@ -139,17 +103,35 @@ export async function publishArticle(options: ArticleOptions): Promise<void> {
     console.log('[x-article] Cover: none');
   }
   printMediaSummary(preparedImages, '[x-article] Local content images (including rendered tables and code blocks)');
-  console.log('[x-article] Short helper scripts generated next to the article:');
-  for (const helperPath of helperScripts) {
-    console.log(`  - ${helperPath}`);
+  if (helperScripts.length > 0) {
+    console.log('[x-article] Short helper scripts generated next to the article:');
+    for (const helperPath of helperScripts) {
+      console.log(`  - ${helperPath}`);
+    }
+    console.log(preparedImages.length > 0
+      ? '[x-article] They will be auto-removed after the last body image is copied.'
+      : '[x-article] They will be auto-removed after the cover image is copied.');
+  } else {
+    const helperPaths = getArticleHelperPaths(options.markdownPath);
+    for (const helperPath of helperPaths) {
+      if (fs.existsSync(helperPath)) {
+        fs.rmSync(helperPath, { force: true });
+      }
+    }
   }
-  console.log('[x-article] Recommended usage from the article directory:');
-  console.log('  - ./xa-cover   # copy the cover image');
-  console.log('  - ./xa-next    # copy the next body image');
-  console.log('  - ./xa-peek    # preview the next body image');
-  console.log('  - ./xa-prev    # recopy the previous body image');
-  console.log('  - ./xa-status  # show image insertion progress');
-  console.log('  - ./xa-open    # reveal the current image in Finder');
+  if (helperScripts.length > 0) {
+    console.log('[x-article] Recommended usage from the article directory:');
+    if (preparedCover) {
+      console.log('  - ./xa-cover   # copy the cover image');
+    }
+    if (preparedImages.length > 0) {
+      console.log('  - ./xa-next    # copy the next body image');
+      console.log('  - ./xa-peek    # preview the next body image');
+      console.log('  - ./xa-prev    # recopy the previous body image');
+      console.log('  - ./xa-status  # show image insertion progress');
+      console.log('  - ./xa-open    # reveal the current image in Finder');
+    }
+  }
   if (preparedCover) {
     console.log(`[x-article] Cover helper: bun ${process.argv[1] ? process.argv[1].replace('x-article.ts', 'x-article-image.ts') : 'x-article-image.ts'} ${JSON.stringify(options.markdownPath)} --copy-cover`);
   }

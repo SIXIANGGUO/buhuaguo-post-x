@@ -26,6 +26,21 @@ interface ArticleImageState {
   nextIndex: number;
 }
 
+const ARTICLE_HELPER_NAMES = [
+  'xa-next',
+  'xa-cover',
+  'xa-peek',
+  'xa-prev',
+  'xa-status',
+  'xa-open',
+  '.x-article-next',
+  '.x-article-cover',
+  '.x-article-peek',
+  '.x-article-prev',
+  '.x-article-status',
+  '.x-article-open',
+] as const;
+
 function getAssetDir(markdownPath: string): string {
   return path.join(path.dirname(path.resolve(markdownPath)), '.buhuaguo-post-x-assets');
 }
@@ -40,6 +55,11 @@ export function getManifestPath(markdownPath: string): string {
 
 export function getStatePath(markdownPath: string): string {
   return path.join(getAssetDir(markdownPath), `${getBaseName(markdownPath)}.article-images.state.json`);
+}
+
+export function getArticleHelperPaths(markdownPath: string): string[] {
+  const articleDir = path.dirname(path.resolve(markdownPath));
+  return ARTICLE_HELPER_NAMES.map((name) => path.join(articleDir, name));
 }
 
 export function writeArticleImageManifest(markdownPath: string, manifest: ArticleImageManifest): void {
@@ -67,4 +87,16 @@ export function readArticleImageState(markdownPath: string): ArticleImageState {
     return { nextIndex: 0 };
   }
   return JSON.parse(fs.readFileSync(statePath, 'utf8')) as ArticleImageState;
+}
+
+export function removeArticleHelperScripts(markdownPath: string): string[] {
+  const removed: string[] = [];
+  for (const helperPath of getArticleHelperPaths(markdownPath)) {
+    if (!fs.existsSync(helperPath)) {
+      continue;
+    }
+    fs.rmSync(helperPath, { force: true });
+    removed.push(helperPath);
+  }
+  return removed;
 }
