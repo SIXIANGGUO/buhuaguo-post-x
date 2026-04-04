@@ -215,13 +215,94 @@ function renderCodeBlock(code: string, language?: string): string {
   return `<div>${languageLabel}<pre style="margin:0;white-space:pre;font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12.5px;line-height:1.58;background:#f8fafc;border:1px solid #dbe4ee;border-radius:10px;padding:12px 14px;overflow-x:auto;color:#0f172a;"><code>${escapedCode}</code></pre></div>`;
 }
 
+function isJsonLikeLanguage(language?: string): boolean {
+  const normalized = normalizeCodeLanguage(language);
+  return normalized === 'json' || normalized === 'jsonc';
+}
+
+function isYamlLikeLanguage(language?: string): boolean {
+  const normalized = normalizeCodeLanguage(language);
+  return normalized === 'yaml' || normalized === 'yml';
+}
+
+function isScriptLikeLanguage(language?: string): boolean {
+  const normalized = normalizeCodeLanguage(language);
+  return normalized === 'javascript'
+    || normalized === 'js'
+    || normalized === 'typescript'
+    || normalized === 'ts'
+    || normalized === 'jsx'
+    || normalized === 'tsx';
+}
+
+function highlightJsonLikeLine(line: string): string {
+  let html = escapeHtml(line);
+  html = html.replace(/(&quot;(?:\\.|[^&])*?&quot;)(\s*:)?/g, (_match, quoted: string, colon?: string) => {
+    if (colon) {
+      return `<span style="color:#1d4ed8;">${quoted}</span>${colon}`;
+    }
+    return `<span style="color:#047857;">${quoted}</span>`;
+  });
+  html = html.replace(/\b(true|false|null)\b/g, '<span style="color:#7c3aed;">$1</span>');
+  return html;
+}
+
+function highlightYamlLikeLine(line: string): string {
+  const escaped = escapeHtml(line);
+  const commentMatch = escaped.match(/^(\s*#.*)$/);
+  if (commentMatch) {
+    return `<span style="color:#64748b;">${escaped}</span>`;
+  }
+
+  let html = escaped.replace(/^(\s*-\s+)/, '<span style="color:#475569;">$1</span>');
+  html = html.replace(/^(\s*)([A-Za-z0-9_.-]+:)/, '$1<span style="color:#1d4ed8;">$2</span>');
+  html = html.replace(/(&quot;(?:\\.|[^&])*?&quot;|'[^']*')/g, '<span style="color:#047857;">$1</span>');
+  html = html.replace(/\b(true|false|null)\b/g, '<span style="color:#7c3aed;">$1</span>');
+  return html;
+}
+
+function highlightScriptLikeLine(line: string): string {
+  let html = escapeHtml(line);
+  const commentMatch = html.match(/(^|[^:])\/\/.*$/);
+  const commentIndex = commentMatch
+    ? html.lastIndexOf('//', (commentMatch.index ?? 0) + commentMatch[1]!.length + 1)
+    : -1;
+  let comment = '';
+  if (commentIndex >= 0) {
+    comment = html.slice(commentIndex);
+    html = html.slice(0, commentIndex);
+  }
+  html = html.replace(/(&quot;(?:\\.|[^&])*?&quot;|'(?:\\.|[^'])*'|`(?:\\.|[^`])*`)/g, '<span style="color:#047857;">$1</span>');
+  html = html.replace(/\b(import|from|export|default|const|let|var|function|return|await|async|if|else|for|while|class|new|try|catch|throw|interface|type)\b/g, '<span style="color:#7c3aed;">$1</span>');
+  html = html.replace(/\b(true|false|null|undefined)\b/g, '<span style="color:#b45309;">$1</span>');
+  if (comment) {
+    html += `<span style="color:#64748b;">${comment}</span>`;
+  }
+  return html;
+}
+
+function highlightCodeLine(line: string, language?: string): string {
+  if (isTerminalLanguage(language)) {
+    return highlightTerminalLine(line);
+  }
+  if (isJsonLikeLanguage(language)) {
+    return highlightJsonLikeLine(line);
+  }
+  if (isYamlLikeLanguage(language)) {
+    return highlightYamlLikeLine(line);
+  }
+  if (isScriptLikeLanguage(language)) {
+    return highlightScriptLikeLine(line);
+  }
+  return escapeHtml(line);
+}
+
 function renderCompactCommandBlock(code: string, language?: string): string {
   const normalizedLanguage = normalizeCodeLanguage(language) || 'code';
-  const terminalStyle = isTerminalLanguage(normalizedLanguage);
   const lines = code.replace(/\n+$/g, '').split('\n');
   const lineHtml = lines.map((line) => {
     const safeLine = line.length > 0
-      ? (terminalStyle ? highlightTerminalLine(line) : escapeHtml(line))
+      ? highlightCodeLine(line, normalizedLanguage)
       : '&nbsp;';
     return `<div style="line-height:1.62;min-height:1.62em;">${safeLine}</div>`;
   }).join('');
@@ -266,8 +347,10 @@ function shouldRenderCodeBlockAsImage(code: string, language?: string): boolean 
   const nonEmptyLines = lines.filter((line) => line.trim().length > 0);
   const maxLineLength = lines.reduce((max, line) => Math.max(max, line.length), 0);
   const hasIndentation = lines.some((line) => /^\s{2,}\S/.test(line));
+  const hasDeepIndentation = lines.some((line) => /^\s{6,}\S/.test(line));
   const hasPipeOrRedirect = lines.some((line) => /[|><]/.test(line));
   const hasBackslashContinuation = lines.some((line) => line.trimEnd().endsWith('\\'));
+  const braceCount = (code.match(/[{}[\]()]/g) ?? []).length;
 
   if (isTerminalLanguage(normalizedLanguage)) {
     return nonEmptyLines.length > 5
@@ -277,18 +360,24 @@ function shouldRenderCodeBlockAsImage(code: string, language?: string): boolean 
       || (hasPipeOrRedirect && (nonEmptyLines.length > 2 || maxLineLength > 60));
   }
 
-  return true;
+  if (isJsonLikeLanguage(normalizedLanguage) || isYamlLikeLanguage(normalizedLanguage)) {
+    return nonEmptyLines.length > 12 || maxLineLength > 92 || hasDeepIndentation;
+  }
+
+  if (isScriptLikeLanguage(normalizedLanguage)) {
+    return nonEmptyLines.length > 7 || maxLineLength > 84 || hasDeepIndentation || braceCount > 18;
+  }
+
+  return nonEmptyLines.length > 4 || maxLineLength > 76 || hasIndentation;
 }
 
 function buildCodeScreenshotHtml(code: string, language?: string): string {
   const normalizedLanguage = normalizeCodeLanguage(language);
-  const terminalStyle = isTerminalLanguage(normalizedLanguage);
   const codeLines = code.split('\n');
   const codeHtml = codeLines
-    .map((line) => `<div class="code-line">${terminalStyle ? highlightTerminalLine(line) : escapeHtml(line) || '&nbsp;'}</div>`)
+    .map((line) => `<div class="code-line">${line.length > 0 ? highlightCodeLine(line, normalizedLanguage) : '&nbsp;'}</div>`)
     .join('');
   const languageLabel = normalizedLanguage || 'code';
-  const wrapperClass = terminalStyle ? 'terminal-card' : 'code-card';
 
   const styleText = `
     :root {
@@ -389,7 +478,7 @@ function buildCodeScreenshotHtml(code: string, language?: string): string {
     <style>${styleText}</style>
   </head>
   <body>
-    <div id="code-shot" class="${wrapperClass}">
+    <div id="code-shot">
       <div class="code-head">
         <div class="code-dots">
           <span class="code-dot dot-red"></span>
