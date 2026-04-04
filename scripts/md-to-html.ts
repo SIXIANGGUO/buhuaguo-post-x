@@ -204,6 +204,12 @@ function renderCompactHeading(content: string): string {
   return `<div><strong>${applyInlineMarkdown(content)}</strong></div>`;
 }
 
+function renderCodeBlock(code: string, language?: string): string {
+  const escapedCode = escapeHtml(code);
+  const languageLabel = language?.trim() ? `<div style="font-size:12px;color:#6b7280;margin-bottom:6px;">${escapeHtml(language.trim())}</div>` : '';
+  return `<div>${languageLabel}<pre style="margin:0;white-space:pre-wrap;word-break:break-word;font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13px;line-height:1.55;background:#f6f8fa;border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;overflow-x:auto;"><code>${escapedCode}</code></pre></div>`;
+}
+
 function stripH1(line: string): string {
   return line.replace(/^#\s+/, '').trim();
 }
@@ -485,6 +491,7 @@ async function convertMarkdownToHtml(
   let tableImageIndex = 0;
   let inCodeBlock = false;
   const codeBuffer: string[] = [];
+  let codeFenceLanguage: string | undefined;
   let listType: 'ul' | 'ol' | null = null;
   let listItems: string[] = [];
 
@@ -533,12 +540,14 @@ async function convertMarkdownToHtml(
     if (trimmed.startsWith('```')) {
       flushList();
       if (inCodeBlock) {
-        htmlBlocks.push(`<blockquote><code>${escapeHtml(codeBuffer.join('\n'))}</code></blockquote>`);
+        htmlBlocks.push(renderCodeBlock(codeBuffer.join('\n'), codeFenceLanguage));
         codeBuffer.length = 0;
         inCodeBlock = false;
+        codeFenceLanguage = undefined;
       } else {
         flushParagraph();
         inCodeBlock = true;
+        codeFenceLanguage = trimmed.slice(3).trim() || undefined;
       }
       continue;
     }
@@ -654,7 +663,7 @@ async function convertMarkdownToHtml(
   flushList();
 
   if (inCodeBlock && codeBuffer.length > 0) {
-    htmlBlocks.push(`<blockquote><code>${escapeHtml(codeBuffer.join('\n'))}</code></blockquote>`);
+    htmlBlocks.push(renderCodeBlock(codeBuffer.join('\n'), codeFenceLanguage));
   }
 
   return {

@@ -211,6 +211,7 @@ function stripHtml(html) {
   return html
     .replace(/<br\\s*\\/?>/gi, '\\n')
     .replace(/<\\/div>/gi, '\\n')
+    .replace(/<\\/pre>/gi, '\\n\\n')
     .replace(/<\\/p>/gi, '\\n\\n')
     .replace(/<\\/h[1-6]>/gi, '\\n\\n')
     .replace(/<\\/li>/gi, '\\n')
@@ -298,6 +299,7 @@ async function copyHtmlMac(htmlFilePath: string): Promise<void> {
     const plainText = html
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/div>/gi, '\n')
+      .replace(/<\/pre>/gi, '\n\n')
       .replace(/<\/p>/gi, '\n\n')
       .replace(/<\/h[1-6]>/gi, '\n\n')
       .replace(/<\/blockquote>/gi, '\n\n')
