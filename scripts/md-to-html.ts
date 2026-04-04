@@ -215,6 +215,18 @@ function renderCodeBlock(code: string, language?: string): string {
   return `<div>${languageLabel}<pre style="margin:0;white-space:pre;font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12.5px;line-height:1.58;background:#f8fafc;border:1px solid #dbe4ee;border-radius:10px;padding:12px 14px;overflow-x:auto;color:#0f172a;"><code>${escapedCode}</code></pre></div>`;
 }
 
+function renderCompactCommandBlock(code: string, language?: string): string {
+  const label = language?.trim()
+    ? `<div style="font-size:11px;color:#6b7280;margin-bottom:6px;text-transform:lowercase;letter-spacing:0.04em;">${escapeHtml(language.trim())}</div>`
+    : '';
+  const lines = code.replace(/\n+$/g, '').split('\n');
+  const lineHtml = lines.map((line) => {
+    const safeLine = line.length > 0 ? escapeHtml(line) : '&nbsp;';
+    return `<div style="line-height:1.6;"><code>${safeLine}</code></div>`;
+  }).join('');
+  return `<div>${label}${lineHtml}</div>`;
+}
+
 function normalizeCodeLanguage(language?: string): string {
   return (language ?? '').trim().toLowerCase();
 }
@@ -240,6 +252,21 @@ function highlightTerminalLine(line: string): string {
   const withFlags = withComments.replace(/(^|\s)(--?[A-Za-z0-9][A-Za-z0-9-]*)/g, '$1<span class="code-flag">$2</span>');
   const withVariables = withFlags.replace(/(\$[A-Za-z_][A-Za-z0-9_]*)/g, '<span class="code-var">$1</span>');
   return `${promptHtml}${withVariables}`;
+}
+
+function shouldRenderCodeBlockAsImage(code: string, language?: string): boolean {
+  const normalizedLanguage = normalizeCodeLanguage(language);
+  const lines = code.replace(/\n+$/g, '').split('\n');
+  const nonEmptyLines = lines.filter((line) => line.trim().length > 0);
+  const maxLineLength = lines.reduce((max, line) => Math.max(max, line.length), 0);
+  const hasIndentation = lines.some((line) => /^\s{2,}\S/.test(line));
+  const hasPipeOrRedirect = lines.some((line) => /[|><]/.test(line));
+
+  if (isTerminalLanguage(normalizedLanguage)) {
+    return nonEmptyLines.length > 3 || maxLineLength > 72 || hasIndentation || hasPipeOrRedirect;
+  }
+
+  return true;
 }
 
 function buildCodeScreenshotHtml(code: string, language?: string): string {
@@ -852,14 +879,19 @@ async function convertMarkdownToHtml(
       flushList();
       flushBlockquote();
       if (inCodeBlock) {
-        const renderedCodePath = renderCodeBlockToImage(
-          markdownPath,
-          assetDir,
-          ++codeImageIndex,
-          codeBuffer.join('\n'),
-          codeFenceLanguage,
-        );
-        htmlBlocks.push(renderCompactPlaceholder(pushResolvedImagePlaceholder(renderedCodePath, `code:${codeImageIndex}`)));
+        const codeContent = codeBuffer.join('\n');
+        if (shouldRenderCodeBlockAsImage(codeContent, codeFenceLanguage)) {
+          const renderedCodePath = renderCodeBlockToImage(
+            markdownPath,
+            assetDir,
+            ++codeImageIndex,
+            codeContent,
+            codeFenceLanguage,
+          );
+          htmlBlocks.push(renderCompactPlaceholder(pushResolvedImagePlaceholder(renderedCodePath, `code:${codeImageIndex}`)));
+        } else {
+          htmlBlocks.push(renderCompactCommandBlock(codeContent, codeFenceLanguage));
+        }
         codeBuffer.length = 0;
         inCodeBlock = false;
         codeFenceLanguage = undefined;
@@ -993,14 +1025,19 @@ async function convertMarkdownToHtml(
   flushBlockquote();
 
   if (inCodeBlock && codeBuffer.length > 0) {
-    const renderedCodePath = renderCodeBlockToImage(
-      markdownPath,
-      assetDir,
-      ++codeImageIndex,
-      codeBuffer.join('\n'),
-      codeFenceLanguage,
-    );
-    htmlBlocks.push(renderCompactPlaceholder(pushResolvedImagePlaceholder(renderedCodePath, `code:${codeImageIndex}`)));
+    const codeContent = codeBuffer.join('\n');
+    if (shouldRenderCodeBlockAsImage(codeContent, codeFenceLanguage)) {
+      const renderedCodePath = renderCodeBlockToImage(
+        markdownPath,
+        assetDir,
+        ++codeImageIndex,
+        codeContent,
+        codeFenceLanguage,
+      );
+      htmlBlocks.push(renderCompactPlaceholder(pushResolvedImagePlaceholder(renderedCodePath, `code:${codeImageIndex}`)));
+    } else {
+      htmlBlocks.push(renderCompactCommandBlock(codeContent, codeFenceLanguage));
+    }
   }
 
   return {
