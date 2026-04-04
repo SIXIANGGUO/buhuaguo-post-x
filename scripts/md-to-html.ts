@@ -215,6 +215,159 @@ function renderCodeBlock(code: string, language?: string): string {
   return `<div>${languageLabel}<pre style="margin:0;white-space:pre;font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12.5px;line-height:1.58;background:#f8fafc;border:1px solid #dbe4ee;border-radius:10px;padding:12px 14px;overflow-x:auto;color:#0f172a;"><code>${escapedCode}</code></pre></div>`;
 }
 
+function normalizeCodeLanguage(language?: string): string {
+  return (language ?? '').trim().toLowerCase();
+}
+
+function isTerminalLanguage(language?: string): boolean {
+  const normalized = normalizeCodeLanguage(language);
+  return normalized === 'bash'
+    || normalized === 'sh'
+    || normalized === 'shell'
+    || normalized === 'zsh'
+    || normalized === 'console'
+    || normalized === 'terminal';
+}
+
+function highlightTerminalLine(line: string): string {
+  const escapedLine = escapeHtml(line);
+  const promptMatch = escapedLine.match(/^(\$|#)\s+/);
+  const promptHtml = promptMatch
+    ? `<span class="code-prompt">${promptMatch[0]}</span>`
+    : '';
+  const content = promptMatch ? escapedLine.slice(promptMatch[0].length) : escapedLine;
+  const withComments = content.replace(/(^|\s)(#[^<]*)$/g, '$1<span class="code-comment">$2</span>');
+  const withFlags = withComments.replace(/(^|\s)(--?[A-Za-z0-9][A-Za-z0-9-]*)/g, '$1<span class="code-flag">$2</span>');
+  const withVariables = withFlags.replace(/(\$[A-Za-z_][A-Za-z0-9_]*)/g, '<span class="code-var">$1</span>');
+  return `${promptHtml}${withVariables}`;
+}
+
+function buildCodeScreenshotHtml(code: string, language?: string): string {
+  const normalizedLanguage = normalizeCodeLanguage(language);
+  const terminalStyle = isTerminalLanguage(normalizedLanguage);
+  const codeLines = code.split('\n');
+  const codeHtml = codeLines
+    .map((line) => `<div class="code-line">${terminalStyle ? highlightTerminalLine(line) : escapeHtml(line) || '&nbsp;'}</div>`)
+    .join('');
+  const languageLabel = normalizedLanguage || 'code';
+  const wrapperClass = terminalStyle ? 'terminal-card' : 'code-card';
+
+  const styleText = `
+    :root {
+      color-scheme: light;
+      --bg: #0f172a;
+      --bg-soft: #111827;
+      --text: #e5eef9;
+      --muted: #94a3b8;
+      --border: rgba(148, 163, 184, 0.18);
+      --prompt: #5eead4;
+      --flag: #fbbf24;
+      --var: #7dd3fc;
+      --comment: #86efac;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      overflow: hidden;
+    }
+    body {
+      display: inline-block;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #code-shot {
+      display: inline-block;
+      min-width: 540px;
+      max-width: 980px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+      border: 1px solid var(--border);
+    }
+    .code-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.92);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+    }
+    .code-dots {
+      display: flex;
+      gap: 7px;
+    }
+    .code-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+    }
+    .dot-red { background: #fb7185; }
+    .dot-yellow { background: #fbbf24; }
+    .dot-green { background: #34d399; }
+    .code-lang {
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .code-body {
+      padding: 14px 16px 16px;
+      background: transparent;
+    }
+    .code-block {
+      margin: 0;
+      color: var(--text);
+      font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
+      font-size: 14px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .code-line {
+      min-height: 1.65em;
+    }
+    .code-prompt {
+      color: var(--prompt);
+      font-weight: 700;
+    }
+    .code-flag {
+      color: var(--flag);
+    }
+    .code-var {
+      color: var(--var);
+    }
+    .code-comment {
+      color: var(--comment);
+    }
+  `;
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>${styleText}</style>
+  </head>
+  <body>
+    <div id="code-shot" class="${wrapperClass}">
+      <div class="code-head">
+        <div class="code-dots">
+          <span class="code-dot dot-red"></span>
+          <span class="code-dot dot-yellow"></span>
+          <span class="code-dot dot-green"></span>
+        </div>
+        <div class="code-lang">${escapeHtml(languageLabel)}</div>
+      </div>
+      <div class="code-body">
+        <pre class="code-block"><code>${codeHtml}</code></pre>
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+
 function renderBlockquote(lines: string[]): string {
   const renderedLines = lines
     .map((line) => line.trim())
@@ -541,6 +694,90 @@ cropped.save(target_path)
   );
 }
 
+function renderCodeBlockToImage(
+  markdownPath: string,
+  assetDir: string,
+  codeIndex: number,
+  code: string,
+  language?: string,
+): string {
+  const articleStem = slugifyFileStem(path.basename(markdownPath, path.extname(markdownPath)));
+  const imagePath = path.join(assetDir, `${articleStem}-code-${String(codeIndex).padStart(2, '0')}.png`);
+  const html = buildCodeScreenshotHtml(code, language);
+  const tempRoot = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'buhuaguo-code-'));
+  const htmlPath = path.join(tempRoot, 'code.html');
+  const rawImagePath = path.join(tempRoot, 'code-raw.png');
+  fs.writeFileSync(htmlPath, html, 'utf8');
+
+  const browsers: Array<'chromium' | 'webkit'> = ['chromium', 'webkit'];
+  let lastError = '';
+
+  try {
+    for (const browser of browsers) {
+      const result = spawnSync('playwright', [
+        'screenshot',
+        '--browser',
+        browser,
+        '--wait-for-selector',
+        '#code-shot',
+        '--full-page',
+        '--viewport-size',
+        '1600,1200',
+        pathToFileURL(htmlPath).href,
+        rawImagePath,
+      ], {
+        encoding: 'utf8',
+      });
+
+      if (result.status === 0 && fs.existsSync(rawImagePath)) {
+        const trimResult = spawnSync('python3', ['-c', `
+from PIL import Image, ImageChops
+import sys
+
+source_path = sys.argv[1]
+target_path = sys.argv[2]
+
+image = Image.open(source_path).convert("RGB")
+background = Image.new("RGB", image.size, (255, 255, 255))
+difference = ImageChops.difference(image, background)
+bbox = difference.getbbox()
+
+if bbox is None:
+    cropped = image
+else:
+    left, top, right, bottom = bbox
+    padding = 10
+    left = max(0, left - padding)
+    top = max(0, top - padding)
+    right = min(image.size[0], right + padding)
+    bottom = min(image.size[1], bottom + padding)
+    cropped = image.crop((left, top, right, bottom))
+
+cropped.save(target_path)
+`, rawImagePath, imagePath], {
+          encoding: 'utf8',
+        });
+
+        if (trimResult.status !== 0) {
+          lastError = (trimResult.stderr || trimResult.stdout || `trim exit ${trimResult.status ?? 'unknown'}`).trim();
+          continue;
+        }
+
+        console.log(`[md-to-html] Rendered code block to image: ${imagePath}`);
+        return imagePath;
+      }
+
+      lastError = (result.stderr || result.stdout || `exit ${result.status ?? 'unknown'}`).trim();
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+
+  throw new Error(
+    `[md-to-html] Failed to render code block to image. X Articles do not preserve pasted HTML code blocks reliably, so code image rendering is required. ${lastError}`,
+  );
+}
+
 async function convertMarkdownToHtml(
   markdown: string,
   markdownPath: string,
@@ -553,6 +790,7 @@ async function convertMarkdownToHtml(
   const contentImages: ImageInfo[] = [];
   let placeholderIndex = 0;
   let tableImageIndex = 0;
+  let codeImageIndex = 0;
   let inCodeBlock = false;
   const codeBuffer: string[] = [];
   let codeFenceLanguage: string | undefined;
@@ -614,7 +852,14 @@ async function convertMarkdownToHtml(
       flushList();
       flushBlockquote();
       if (inCodeBlock) {
-        htmlBlocks.push(renderCodeBlock(codeBuffer.join('\n'), codeFenceLanguage));
+        const renderedCodePath = renderCodeBlockToImage(
+          markdownPath,
+          assetDir,
+          ++codeImageIndex,
+          codeBuffer.join('\n'),
+          codeFenceLanguage,
+        );
+        htmlBlocks.push(renderCompactPlaceholder(pushResolvedImagePlaceholder(renderedCodePath, `code:${codeImageIndex}`)));
         codeBuffer.length = 0;
         inCodeBlock = false;
         codeFenceLanguage = undefined;
@@ -748,7 +993,14 @@ async function convertMarkdownToHtml(
   flushBlockquote();
 
   if (inCodeBlock && codeBuffer.length > 0) {
-    htmlBlocks.push(renderCodeBlock(codeBuffer.join('\n'), codeFenceLanguage));
+    const renderedCodePath = renderCodeBlockToImage(
+      markdownPath,
+      assetDir,
+      ++codeImageIndex,
+      codeBuffer.join('\n'),
+      codeFenceLanguage,
+    );
+    htmlBlocks.push(renderCompactPlaceholder(pushResolvedImagePlaceholder(renderedCodePath, `code:${codeImageIndex}`)));
   }
 
   return {

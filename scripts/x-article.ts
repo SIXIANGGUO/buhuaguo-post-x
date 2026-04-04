@@ -138,7 +138,7 @@ export async function publishArticle(options: ArticleOptions): Promise<void> {
   } else {
     console.log('[x-article] Cover: none');
   }
-  printMediaSummary(preparedImages, '[x-article] Local content images (including rendered tables)');
+  printMediaSummary(preparedImages, '[x-article] Local content images (including rendered tables and code blocks)');
   console.log('[x-article] Short helper scripts generated next to the article:');
   for (const helperPath of helperScripts) {
     console.log(`  - ${helperPath}`);
