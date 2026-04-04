@@ -313,9 +313,13 @@ function buildTableScreenshotHtml(
       margin: 0;
       padding: 0;
       background: transparent;
+      width: fit-content;
+      height: fit-content;
+      overflow: hidden;
     }
     body {
       display: inline-block;
+      width: fit-content;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
     }
@@ -444,7 +448,7 @@ function renderMarkdownTableToImage(
         '#table-shot',
         '--full-page',
         '--viewport-size',
-        '1600,1200',
+        '32,32',
         pathToFileURL(htmlPath).href,
         imagePath,
       ], {
