@@ -216,15 +216,21 @@ function renderCodeBlock(code: string, language?: string): string {
 }
 
 function renderCompactCommandBlock(code: string, language?: string): string {
-  const label = language?.trim()
-    ? `<div style="font-size:11px;color:#6b7280;margin-bottom:6px;text-transform:lowercase;letter-spacing:0.04em;">${escapeHtml(language.trim())}</div>`
-    : '';
+  const normalizedLanguage = normalizeCodeLanguage(language) || 'code';
+  const terminalStyle = isTerminalLanguage(normalizedLanguage);
   const lines = code.replace(/\n+$/g, '').split('\n');
   const lineHtml = lines.map((line) => {
-    const safeLine = line.length > 0 ? escapeHtml(line) : '&nbsp;';
-    return `<div style="line-height:1.6;"><code>${safeLine}</code></div>`;
+    const safeLine = line.length > 0
+      ? (terminalStyle ? highlightTerminalLine(line) : escapeHtml(line))
+      : '&nbsp;';
+    return `<div style="line-height:1.62;min-height:1.62em;">${safeLine}</div>`;
   }).join('');
-  return `<div>${label}${lineHtml}</div>`;
+  return `<div style="border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;background:#f8fafc;">
+    <div style="display:flex;align-items:center;padding:9px 14px;background:#e9eff4;border-bottom:1px solid #dbe4ee;">
+      <span style="font-size:12px;font-weight:700;color:#0f172a;letter-spacing:0.03em;text-transform:lowercase;">${escapeHtml(normalizedLanguage)}</span>
+    </div>
+    <div style="padding:12px 14px;color:#0f172a;font-family:SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;">${lineHtml}</div>
+  </div>`;
 }
 
 function normalizeCodeLanguage(language?: string): string {
@@ -245,12 +251,12 @@ function highlightTerminalLine(line: string): string {
   const escapedLine = escapeHtml(line);
   const promptMatch = escapedLine.match(/^(\$|#)\s+/);
   const promptHtml = promptMatch
-    ? `<span class="code-prompt">${promptMatch[0]}</span>`
+    ? `<span style="color:#2563eb;font-weight:700;">${promptMatch[0]}</span>`
     : '';
   const content = promptMatch ? escapedLine.slice(promptMatch[0].length) : escapedLine;
-  const withComments = content.replace(/(^|\s)(#[^<]*)$/g, '$1<span class="code-comment">$2</span>');
-  const withFlags = withComments.replace(/(^|\s)(--?[A-Za-z0-9][A-Za-z0-9-]*)/g, '$1<span class="code-flag">$2</span>');
-  const withVariables = withFlags.replace(/(\$[A-Za-z_][A-Za-z0-9_]*)/g, '<span class="code-var">$1</span>');
+  const withComments = content.replace(/(^|\s)(#[^<]*)$/g, '$1<span style="color:#64748b;">$2</span>');
+  const withFlags = withComments.replace(/(^|\s)(--?[A-Za-z0-9][A-Za-z0-9-]*)/g, '$1<span style="color:#0f766e;">$2</span>');
+  const withVariables = withFlags.replace(/(\$[A-Za-z_][A-Za-z0-9_]*)/g, '<span style="color:#7c3aed;">$1</span>');
   return `${promptHtml}${withVariables}`;
 }
 
@@ -261,9 +267,14 @@ function shouldRenderCodeBlockAsImage(code: string, language?: string): boolean 
   const maxLineLength = lines.reduce((max, line) => Math.max(max, line.length), 0);
   const hasIndentation = lines.some((line) => /^\s{2,}\S/.test(line));
   const hasPipeOrRedirect = lines.some((line) => /[|><]/.test(line));
+  const hasBackslashContinuation = lines.some((line) => line.trimEnd().endsWith('\\'));
 
   if (isTerminalLanguage(normalizedLanguage)) {
-    return nonEmptyLines.length > 3 || maxLineLength > 72 || hasIndentation || hasPipeOrRedirect;
+    return nonEmptyLines.length > 5
+      || maxLineLength > 88
+      || hasIndentation
+      || hasBackslashContinuation
+      || (hasPipeOrRedirect && (nonEmptyLines.length > 2 || maxLineLength > 60));
   }
 
   return true;
@@ -282,15 +293,15 @@ function buildCodeScreenshotHtml(code: string, language?: string): string {
   const styleText = `
     :root {
       color-scheme: light;
-      --bg: #0f172a;
-      --bg-soft: #111827;
-      --text: #e5eef9;
-      --muted: #94a3b8;
-      --border: rgba(148, 163, 184, 0.18);
-      --prompt: #5eead4;
-      --flag: #fbbf24;
-      --var: #7dd3fc;
-      --comment: #86efac;
+      --card-bg: #f8fafc;
+      --header-bg: #e9eff4;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #dbe4ee;
+      --prompt: #2563eb;
+      --flag: #0f766e;
+      --var: #7c3aed;
+      --comment: #64748b;
     }
     html, body {
       margin: 0;
@@ -305,11 +316,11 @@ function buildCodeScreenshotHtml(code: string, language?: string): string {
     }
     #code-shot {
       display: inline-block;
-      min-width: 540px;
+      min-width: 500px;
       max-width: 980px;
       border-radius: 16px;
       overflow: hidden;
-      background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+      background: var(--card-bg);
       border: 1px solid var(--border);
     }
     .code-head {
@@ -318,8 +329,8 @@ function buildCodeScreenshotHtml(code: string, language?: string): string {
       justify-content: space-between;
       gap: 12px;
       padding: 10px 14px;
-      background: rgba(15, 23, 42, 0.92);
-      border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+      background: var(--header-bg);
+      border-bottom: 1px solid var(--border);
     }
     .code-dots {
       display: flex;
@@ -334,22 +345,22 @@ function buildCodeScreenshotHtml(code: string, language?: string): string {
     .dot-yellow { background: #fbbf24; }
     .dot-green { background: #34d399; }
     .code-lang {
-      color: #cbd5e1;
-      font-size: 11px;
+      color: var(--text);
+      font-size: 12px;
       font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      text-transform: lowercase;
     }
     .code-body {
-      padding: 14px 16px 16px;
-      background: transparent;
+      padding: 12px 14px 14px;
+      background: var(--card-bg);
     }
     .code-block {
       margin: 0;
       color: var(--text);
       font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
       font-size: 14px;
-      line-height: 1.65;
+      line-height: 1.62;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
